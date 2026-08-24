@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ControlPlane.ai - AI Safety & Governance Gateway</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">
+          <div class="logo-shield"></div>
+        </div>
+        <div class="brand-text">
+          <h2>ControlPlane<span>.ai</span></h2>
+          <span class="badge live-badge"><span class="dot"></span> PROXY LIVE</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="overview">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Live Telemetry
+        </button>
+        <button class="nav-item" data-tab="sandbox">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Interactive Playground
+        </button>
+        <button class="nav-item" data-tab="policies">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Policy Matrix
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-status-card">
+          <div class="status-indicator online"></div>
+          <div class="status-details">
+            <span class="status-title">FastAPI Engine</span>
+            <span class="status-subtitle">Port 8000 (WAL mode)</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Header Bar -->
+      <header class="top-header">
+        <div class="header-titles">
+          <h1 id="page-title">Real-Time Proxy Telemetry</h1>
+          <p id="page-subtitle">Zero-latency inline AI policy enforcement and live trace inspection</p>
+        </div>
+        <div class="header-actions">
+          <button id="btn-refresh" class="btn btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Refresh
+          </button>
+          <button id="btn-quick-test" class="btn btn-primary">
+            Launch Test Query
+          </button>
+        </div>
+      </header>
+
+      <!-- TAB 1: OVERVIEW & TELEMETRY -->
+      <section id="tab-overview" class="tab-pane active">
+        <!-- Metric Cards -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <span class="metric-label">Total Transactions</span>
+            <div class="metric-value" id="metric-total">0</div>
+            <span class="metric-trend text-muted">All incoming requests</span>
+          </div>
+          <div class="metric-card highlight-allow">
+            <span class="metric-label">Allowed / Pass</span>
+            <div class="metric-value text-success" id="metric-allow">0</div>
+            <span class="metric-trend text-success">Clean egress traffic</span>
+          </div>
+          <div class="metric-card highlight-transform">
+            <span class="metric-label">Sanitized / Masked</span>
+            <div class="metric-value text-warning" id="metric-transform">0</div>
+            <span class="metric-trend text-warning">PII session masked</span>
+          </div>
+          <div class="metric-card highlight-rewrite">
+            <span class="metric-label">Rewritten / Fallbacks</span>
+            <div class="metric-value text-accent" id="metric-rewrite">0</div>
+            <span class="metric-trend text-accent">Hallucination / safe replays</span>
+          </div>
+          <div class="metric-card highlight-block">
+            <span class="metric-label">Blocked (422)</span>
+            <div class="metric-value text-danger" id="metric-block">0</div>
+            <span class="metric-trend text-danger">Injection & bounds violations</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Avg Total Latency</span>
+            <div class="metric-value" id="metric-latency">0.0<span class="unit">ms</span></div>
+            <span class="metric-trend text-success">&lt; 50ms heuristic budget</span>
+          </div>
+        </div>
+
+        <!-- Live Traces Table -->
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Recent Transaction Audit Stream</h3>
+            <span class="panel-tag">SQLite WAL Sink</span>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Trace ID</th>
+                  <th>App / Policy</th>
+                  <th>Mode</th>
+                  <th>PDP Action</th>
+                  <th>Latency</th>
+                  <th>PII Redacted</th>
+                  <th>Violations / Notes</th>
+                  <th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody id="traces-tbody">
+                <tr>
+                  <td colspan="8" class="text-center text-muted">No transaction logs recorded yet. Run a query in the playground!</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: INTERACTIVE PLAYGROUND -->
+      <section id="tab-sandbox" class="tab-pane">
+        <div class="sandbox-layout">
+          <!-- Left: Input controls -->
+          <div class="panel sandbox-panel">
+            <div class="panel-header">
+              <h3>Simulate LLM Request</h3>
+              <div class="scenario-presets">
+                <label>Preset:</label>
+                <select id="preset-select" class="form-select">
+                  <option value="pii">Customer Support (PII Masking)</option>
+                  <option value="injection">Customer Support (Prompt Injection)</option>
+                  <option value="rag_clean">RAG Grounded (Verified Context)</option>
+                  <option value="rag_hallu">RAG Hallucination ([simulate_hallucination])</option>
+                  <option value="agent_valid">Action Agent (Valid Command)</option>
+                  <option value="agent_invalid">Action Agent (Out-of-Bounds Bounds Breach)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="sandbox-form">
+              <div class="form-group">
+                <label>X-ControlPlane-App-ID Header</label>
+                <input type="text" id="sb-app-id" class="form-input" value="customer-support" />
+              </div>
+
+              <div class="form-group">
+                <label>User Prompt</label>
+                <textarea id="sb-prompt" class="form-textarea" rows="4">Please update the email for account 88392 to alice.smith@example.com and phone to (555) 382-9102.</textarea>
+              </div>
+
+              <div class="form-group">
+                <label>Retrieved Context Chunks (Optional for RAG)</label>
+                <textarea id="sb-context" class="form-textarea font-mono" rows="3" placeholder='["Internal document: refunds are issued within 5 business days."]'></textarea>
+              </div>
+
+              <div class="form-actions">
+                <button id="btn-run-sandbox" class="btn btn-primary btn-block">
+                  Send Through Proxy Gate
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Inspection Result -->
+          <div class="panel sandbox-panel">
+            <div class="panel-header">
+              <h3>Proxy Inspection & PDP Decision</h3>
+              <span id="sb-pdp-badge" class="badge">Awaiting Execution</span>
+            </div>
+
+            <div class="inspection-results">
+              <div class="inspection-metric-bar">
+                <div class="metric-item">
+                  <span class="label">Status:</span>
+                  <span id="sb-status" class="val text-muted">-</span>
+                </div>
+                <div class="metric-item">
+                  <span class="label">Pre-Latency:</span>
+                  <span id="sb-pre-lat" class="val text-muted">-</span>
+                </div>
+                <div class="metric-item">
+                  <span class="label">Total Latency:</span>
+                  <span id="sb-total-lat" class="val text-muted">-</span>
+                </div>
+              </div>
+
+              <div class="diff-view-container">
+                <div class="view-header">
+                  <h4>Output Egress Payload / Response</h4>
+                </div>
+                <pre id="sb-response-json" class="json-preview">// Response payload will appear here...</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: POLICY MATRIX -->
+      <section id="tab-policies" class="tab-pane">
+        <div class="panel">
+          <div class="panel-header">
+            <h3>Active Configured Policies (YAML Registry)</h3>
+            <button id="btn-reload-policies" class="btn btn-secondary">Hot Reload Policies</button>
+          </div>
+          <pre id="policies-json-view" class="json-preview font-mono">Loading active policy registry...</pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

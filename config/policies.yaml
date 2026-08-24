@@ -1,0 +1,69 @@
+policies:
+  customer-support:
+    version: "1.0.0"
+    mode: "chatbot"
+    fail_mode: "fail_closed"
+    streaming_mode: "buffered"
+    pre_execution:
+      block_prompt_injection: true
+      injection_threshold: 0.60
+      pii_action: "mask" # "mask" | "block" | "none"
+      masked_entities: ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD", "SSN", "IP_ADDRESS", "PERSON"]
+    post_execution:
+      toxicity_threshold: 0.70
+      bias_subspace_threshold: 0.65
+      action_on_violation: "rewrite"
+      fallback_message: "I am unable to complete this response due to content safety policies. Please contact customer support directly."
+
+  internal-kb-rag:
+    version: "1.0.0"
+    mode: "rag"
+    fail_mode: "fail_open"
+    streaming_mode: "buffered"
+    pre_execution:
+      block_prompt_injection: true
+      injection_threshold: 0.75
+      pii_action: "mask"
+      masked_entities: ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD", "SSN"]
+    post_execution:
+      hallucination_engine:
+        enabled: true
+        min_grounding_score: 0.70
+        action_on_low_grounding: "rewrite"
+        fallback_message: "The requested details could not be verified against verified internal source documents."
+
+  action-agent:
+    version: "1.0.0"
+    mode: "agent"
+    fail_mode: "fail_closed"
+    streaming_mode: "pass_through"
+    pre_execution:
+      block_prompt_injection: true
+      injection_threshold: 0.50
+      pii_action: "mask"
+      masked_entities: ["CREDIT_CARD", "SSN", "EMAIL_ADDRESS"]
+    tool_guards:
+      execute_command:
+        parameter_rules:
+          - field: "command_type"
+            type: "string"
+            allowed_values: ["READ", "QUERY", "UPDATE", "NOTIFY"]
+          - field: "timeout_seconds"
+            type: "int"
+            min_value: 1
+            max_value: 300
+          - field: "batch_size"
+            type: "int"
+            min_value: 1
+            max_value: 1000
+        action_on_violation: "block"
+      database_mutation:
+        parameter_rules:
+          - field: "table"
+            type: "string"
+            allowed_values: ["users", "orders", "audit_events", "tickets"]
+          - field: "affected_rows_limit"
+            type: "int"
+            min_value: 1
+            max_value: 50
+        action_on_violation: "block"
