@@ -10,15 +10,18 @@
 
 - **Drop-In OpenAI Compatibility**: Exposes `POST /v1/chat/completions` supporting both synchronous JSON and streaming Server-Sent Events (`stream=true`).
 - **Policy Enforcement Routing**: Dynamic policy selection via `X-ControlPlane-App-ID` header with hot-reloading YAML configuration.
-- **Pre-Execution Pipeline**:
-  - **Prompt Injection Defense**: High-speed regex heuristics and boundary analysis.
-  - **Dual-Tier Reversible PII Vault**: Fast-path regex (<5ms) for structural data + Presidio contextual fallback mapping to session tokens (`Alice Smith` $\to$ `<PERSON_1>`).
-- **Post-Execution Pipeline**:
-  - **Agent Tool Interception**: Strict schema type checks, numeric boundary limits (`min_value`, `max_value`), and categorical allowlists.
-  - **RAG Grounding & Hallucination Engine**: Batched claim splitting and NLI entailment scoring against `retrieved_context`.
-  - **Toxicity & Demographic Bias Scanner**: Output content filters.
-  - **PII De-tokenization**: Reconstructs sensitive fields on outbound egress.
-- **Deterministic PDP Decision Matrix**: `ALLOW`, `TRANSFORM` (PII masked), `REWRITE` (fallback completion), `BLOCK` (HTTP 422 Unprocessable Content).
+- **Model-Specific Guard Pipelines**:
+  - **RAG (`internal-kb-rag`)**:
+    - **Pre-Execution**: Prompt Injection Defense, PII Masking Vault, Context Capping (Token Optimization), and Semantic Caching.
+    - **Post-Execution**: NLI Grounding Verification (Hallucination), Citation Similarity, Toxicity Check, Subspace Bias Drift, and PII De-tokenization (Recovery).
+  - **Chatbot (`customer-support`)**:
+    - **Pre-Execution**: Prompt Injection Defense, PII Masking Vault, and Semantic Caching.
+    - **Post-Execution**: SLM-as-a-judge Hallucination (Ollama), Toxicity Check, Counterfactual Fairness (Ollama Identity Swapping), Subspace Bias Drift, and PII De-tokenization.
+  - **Agent (`action-agent`)**:
+    - **Pre-Execution**: Prompt Injection Defense, PII Masking Vault, and Semantic Caching.
+    - **Post-Execution**: Tool Call Deduplication (Token Loop Optimization), Tool Parameter Validation (Bounds/Schema), Confidence Mismatch (Logprobs check), Reasoning Similarity (Thinking ↔ Output alignment), and PII De-tokenization.
+- **Extreme Latency Optimizations**: Concurrent execution of all inline guards (`asyncio.gather`), sub-2ms deterministic Semantic Caching, and Token Context Capping to minimize downstream LLM costs.
+- **Deterministic PDP Decision Matrix**: `ALLOW`, `TRANSFORM` (PII masked), `REWRITE` (fallback completion / injected cache output), `BLOCK` (HTTP 422 Unprocessable Content).
 - **Zero-Overhead Auditing**: Async SQLite WAL persistence recording trace IDs, latency breakdowns, risk scores, and full replayable payloads.
 - **Live Observability Dashboard**: Interactive playground and real-time telemetry stream at `http://localhost:8000/dashboard`.
 

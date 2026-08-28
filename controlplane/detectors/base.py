@@ -21,6 +21,7 @@ class DetectionResult(BaseModel):
     suggested_action: PDPAction = PDPAction.ALLOW
     violation_code: ViolationCode = ViolationCode.NONE
     reason: Optional[str] = None
+    fallback_payload: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 

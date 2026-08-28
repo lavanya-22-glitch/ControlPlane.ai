@@ -10,7 +10,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - CONTROLPLANE_MOCK_MODE=true
+      - CONTROLPLANE_MOCK_MODE=${CONTROLPLANE_MOCK_MODE:-true}
+      - UPSTREAM_URL=${UPSTREAM_URL:-https://api.openai.com/v1/chat/completions}
       - CONTROLPLANE_POLICY_PATH=config/policies.yaml
       - CONTROLPLANE_DB_PATH=data/audit_logs.db
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}

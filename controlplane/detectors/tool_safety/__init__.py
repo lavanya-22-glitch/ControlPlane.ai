@@ -1,7 +1,9 @@
 from controlplane.detectors.tool_safety.validator import AgentToolGuard
-from controlplane.detectors.tool_safety.bounds import check_parameter_bounds
+from controlplane.detectors.tool_safety.confidence_mismatch import ConfidenceMismatchGuard
+from controlplane.detectors.tool_safety.reasoning_similarity import ReasoningOutputSimilarityGuard
 
 __all__ = [
     "AgentToolGuard",
-    "check_parameter_bounds",
+    "ConfidenceMismatchGuard",
+    "ReasoningOutputSimilarityGuard",
 ]

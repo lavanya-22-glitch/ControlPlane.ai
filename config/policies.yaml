@@ -12,8 +12,18 @@ policies:
     post_execution:
       toxicity_threshold: 0.70
       bias_subspace_threshold: 0.65
+      bias_projection_enabled: true
+      counterfactual_check_enabled: true
+      counterfactual_ollama_base_url: "http://localhost:11434/api/generate"
+      counterfactual_ollama_model_name: "batiai/gemma4-e2b:q4"
       action_on_violation: "rewrite"
       fallback_message: "I am unable to complete this response due to content safety policies. Please contact customer support directly."
+      chatbot_hallucination:
+        enabled: true
+        ollama_base_url: "http://localhost:11434/api/generate"
+        ollama_model_name: "batiai/gemma4-e2b:q4"
+        action_on_violation: "rewrite"
+        fallback_message: "I'm sorry, I cannot verify the accuracy of this response."
 
   internal-kb-rag:
     version: "1.0.0"
@@ -25,12 +35,39 @@ policies:
       injection_threshold: 0.75
       pii_action: "mask"
       masked_entities: ["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD", "SSN"]
+      context_capping:
+        enabled: true
+        max_context_length_chars: 3000
+      semantic_cache:
+        enabled: true
+        similarity_threshold: 1.0
     post_execution:
       hallucination_engine:
         enabled: true
         min_grounding_score: 0.70
         action_on_low_grounding: "rewrite"
         fallback_message: "The requested details could not be verified against verified internal source documents."
+        # NLI backend: "auto" | "cross_encoder" | "transformers" | "onnx" | "heuristic"
+        # "auto" selects: ONNX > CrossEncoder > Transformers > Heuristic.
+        # "cross_encoder" uses sentence-transformers CrossEncoder (joint cross-attention).
+        nli_backend: "auto"
+        nli_model_name: "cross-encoder/nli-deberta-v3-small"
+        # onnx_model_path: "models/nli-deberta-v3-small.onnx"  # uncomment for ONNX
+        # Per-claim short-circuit: abort if any single claim scores below this.
+        early_exit_threshold: 0.20
+        # Context Reranker: filter irrelevant RAG chunks before NLI scoring.
+        # Uses cross-encoder/ms-marco-MiniLM-L-6-v2 to score (query, chunk) relevance.
+        # Disable if latency is a concern or if retrieval quality is already high.
+        context_reranking_enabled: false  # set to true when sentence-transformers is installed
+        context_reranker_model: "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        context_relevance_threshold: 0.30  # chunks below this are dropped before NLI
+        context_reranker_top_k: 5          # keep at most 5 relevant chunks
+        # Citation Similarity: parse [1], [Doc A] markers, score cited claim vs. context.
+        # Short-circuits on first citation below fail_threshold; aggregate on avg_threshold.
+        citation_check_enabled: false       # enable when completions include inline citations
+        citation_similarity_method: "auto"  # "auto" | "ngram" | "embedding"
+        citation_fail_threshold: 0.35       # per-citation short-circuit threshold
+        citation_avg_threshold: 0.50        # aggregate avg threshold across all citations
 
   action-agent:
     version: "1.0.0"
@@ -67,3 +104,17 @@ policies:
             min_value: 1
             max_value: 50
         action_on_violation: "block"
+    agent_config:
+      confidence_mismatch:
+        enabled: true
+        avg_logprob_threshold: -2.0
+        min_logprob_threshold: -4.0
+        per_token_threshold: -2.5
+        max_low_conf_pct: 0.30
+      reasoning_similarity:
+        enabled: true
+        similarity_method: "auto"
+        similarity_fail_threshold: 0.15
+      tool_deduplication:
+        enabled: true
+        max_duplicate_calls: 1

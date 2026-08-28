@@ -16,9 +16,17 @@ from controlplane.detectors.pii.scanner import PIIScannerGuard
 from controlplane.detectors.pii.detokenizer import PIIDetokenizerGuard
 from controlplane.detectors.injection.classifier import PromptInjectionGuard
 from controlplane.detectors.hallucination.nli_verifier import NLIRAGGroundingGuard
+from controlplane.detectors.hallucination.citation_similarity import CitationGroundingGuard
+from controlplane.detectors.hallucination.chatbot_judge import ChatbotHallucinationGuard
 from controlplane.detectors.bias_toxicity.toxicity_scorer import ToxicityGuard
 from controlplane.detectors.bias_toxicity.bias_subspace import BiasSubspaceGuard
 from controlplane.detectors.tool_safety.validator import AgentToolGuard
+from controlplane.detectors.tool_safety.confidence_mismatch import ConfidenceMismatchGuard
+from controlplane.detectors.tool_safety.reasoning_similarity import ReasoningOutputSimilarityGuard
+import asyncio
+from controlplane.detectors.token_optim.context_capper import ContextCapperGuard
+from controlplane.detectors.token_optim.tool_deduplicator import ToolDeduplicationGuard
+from controlplane.detectors.cache.semantic import semantic_cache_engine
 from controlplane.pdp.engine import pdp_engine
 from controlplane.pdp.types import PDPAction, ViolationCode
 from controlplane.pdp.actions import build_error_response
@@ -34,9 +42,15 @@ pii_scanner = PIIScannerGuard()
 pii_detokenizer = PIIDetokenizerGuard()
 injection_guard = PromptInjectionGuard()
 rag_grounding_guard = NLIRAGGroundingGuard()
+citation_guard = CitationGroundingGuard()
+chatbot_judge_guard = ChatbotHallucinationGuard()
 toxicity_guard = ToxicityGuard()
 bias_guard = BiasSubspaceGuard()
 tool_guard = AgentToolGuard()
+confidence_guard = ConfidenceMismatchGuard()
+reasoning_guard = ReasoningOutputSimilarityGuard()
+context_capper_guard = ContextCapperGuard()
+tool_dedup_guard = ToolDeduplicationGuard()
 
 
 @router.post("/v1/chat/completions")
@@ -64,18 +78,42 @@ async def chat_completions(
     )
 
     # -------------------------------------------------------------
+    # 0. SEMANTIC CACHING
+    # -------------------------------------------------------------
+    cache_config = getattr(policy.pre_execution, "semantic_cache", None) if policy.pre_execution else None
+    if cache_config and cache_config.enabled:
+        cached_response = semantic_cache_engine.get_cached_response(ctx.messages, ctx.retrieved_context)
+        if cached_response:
+            # We must inject our new trace_id into the cached response if we want it to track properly
+            if "id" in cached_response:
+                cached_response["id"] = f"chatcmpl-{trace_id}"
+                
+            total_latency_ms = (time.perf_counter() - t_start) * 1000
+            
+            # Record the instant cache hit telemetry
+            await telemetry_sink.record_trace(
+                AuditTraceRecord(
+                    trace_id=trace_id,
+                    app_id=app_id,
+                    policy_id=policy.version,
+                    total_latency_ms=total_latency_ms,
+                    action_taken="ALLOW",
+                    metrics={"semantic_cache_hit": True}
+                )
+            )
+            return JSONResponse(status_code=200, content=cached_response)
+
+    # -------------------------------------------------------------
     # 1. PRE-EXECUTION PIPELINE (Injection Check -> PII Masking)
     # -------------------------------------------------------------
     t_pre_start = time.perf_counter()
-    pre_results: List[DetectionResult] = []
-
-    # Prompt Injection Guard
-    inj_res = await injection_guard.evaluate(ctx)
-    pre_results.append(inj_res)
-
-    # PII Scanner & Vault Masking
-    pii_res = await pii_scanner.evaluate(ctx)
-    pre_results.append(pii_res)
+    
+    # Run all pre-execution guards concurrently
+    pre_results: List[DetectionResult] = list(await asyncio.gather(
+        injection_guard.evaluate(ctx),
+        context_capper_guard.evaluate(ctx),
+        pii_scanner.evaluate(ctx)
+    ))
 
     t_pre_end = time.perf_counter()
     pre_latency_ms = (t_pre_end - t_pre_start) * 1000
@@ -144,27 +182,41 @@ async def chat_completions(
     message_obj = choice.get("message", {})
     ctx.completion_text = message_obj.get("content") or ""
     ctx.tool_calls = message_obj.get("tool_calls")
+    # Store the full upstream response in ctx so confidence_guard can read logprobs
+    # and reasoning_guard can read reasoning_content from the message object.
+    ctx.metadata["raw_response"] = upstream_response
 
     post_results: List[DetectionResult] = []
 
-    # Tool Call Safety Guard
-    if ctx.tool_calls:
-        tool_res = await tool_guard.evaluate(ctx)
-        post_results.append(tool_res)
+    post_tasks = []
 
-    # RAG Grounding & Hallucination Guard
+    # Tool Call Safety Guards (schema + bounds + confidence + reasoning alignment)
+    if ctx.tool_calls:
+        post_tasks.append(tool_dedup_guard.evaluate(ctx))
+        post_tasks.append(tool_guard.evaluate(ctx))
+        post_tasks.append(confidence_guard.evaluate(ctx))
+        post_tasks.append(reasoning_guard.evaluate(ctx))
+
+    # RAG Grounding & Hallucination Guard (NLI — per-claim early exit)
     if ctx.retrieved_context and ctx.completion_text:
-        rag_res = await rag_grounding_guard.evaluate(ctx)
-        post_results.append(rag_res)
+        post_tasks.append(rag_grounding_guard.evaluate(ctx))
+        post_tasks.append(citation_guard.evaluate(ctx))
+
+    # Chatbot Hallucination Guard (Ollama SLM Judge)
+    if ctx.completion_text:
+        post_tasks.append(chatbot_judge_guard.evaluate(ctx))
 
     # Toxicity & Bias Guards
     if ctx.completion_text:
-        tox_res = await toxicity_guard.evaluate(ctx)
-        post_results.append(tox_res)
-        bias_res = await bias_guard.evaluate(ctx)
-        post_results.append(bias_res)
+        post_tasks.append(toxicity_guard.evaluate(ctx))
+        post_tasks.append(bias_guard.evaluate(ctx))
 
-    # Egress PII De-tokenization
+    # Execute all conditional guards concurrently
+    if post_tasks:
+        post_results.extend(list(await asyncio.gather(*post_tasks)))
+
+    # Egress PII De-tokenization MUST run sequentially after others
+    # because it mutates ctx.completion_text
     detok_res = await pii_detokenizer.evaluate(ctx)
     post_results.append(detok_res)
 
@@ -196,6 +248,10 @@ async def chat_completions(
         # ALLOW or TRANSFORM: update completion with detokenized text
         if ctx.completion_text is not None and "choices" in final_response_body:
             final_response_body["choices"][0]["message"]["content"] = ctx.completion_text
+            
+        # Write to semantic cache if configured and safe
+        if cache_config and cache_config.enabled:
+            semantic_cache_engine.set_cached_response(ctx.messages, ctx.retrieved_context, final_response_body)
 
     # Attach ControlPlane trace metadata to response header
     response_headers = {
@@ -203,6 +259,15 @@ async def chat_completions(
         "X-ControlPlane-Policy-Action": final_decision.action.value,
         "X-ControlPlane-Latency-MS": f"{total_latency_ms:.2f}",
     }
+    
+    if "prompt_injection" in final_decision.scores:
+        response_headers["X-ControlPlane-Score-Injection"] = f"{final_decision.scores['prompt_injection']:.3f}"
+    if "bias_subspace_detector" in final_decision.scores:
+        response_headers["X-ControlPlane-Score-Bias"] = f"{final_decision.scores['bias_subspace_detector']:.3f}"
+    if "rag_hallucination_engine" in final_decision.scores:
+        response_headers["X-ControlPlane-Score-Grounding"] = f"{final_decision.scores['rag_hallucination_engine']:.3f}"
+    if final_decision.reason:
+        response_headers["X-ControlPlane-Violation-Reason"] = str(final_decision.reason)
 
     # -------------------------------------------------------------
     # 5. ASYNC AUDIT TELEMETRY SINK

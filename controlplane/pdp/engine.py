@@ -61,20 +61,23 @@ class PDPEngine:
         ]
         if rewrite_violations:
             primary = rewrite_violations[0]
-            fallback_text = (
-                primary.metadata.get("fallback_message")
-                or (
-                    policy.post_execution.fallback_message
-                    if policy.post_execution
-                    else None
+            if primary.fallback_payload is not None:
+                fallback_payload = primary.fallback_payload
+            else:
+                fallback_text = (
+                    primary.metadata.get("fallback_message")
+                    or (
+                        policy.post_execution.fallback_message
+                        if policy.post_execution
+                        else None
+                    )
+                    or "The response could not be verified and was replaced by safety policy."
                 )
-                or "The response could not be verified and was replaced by safety policy."
-            )
-            fallback_payload = build_fallback_completion(
-                fallback_text=fallback_text,
-                trace_id=ctx.trace_id,
-                model_name=upstream_model,
-            )
+                fallback_payload = build_fallback_completion(
+                    fallback_text=fallback_text,
+                    trace_id=ctx.trace_id,
+                    model_name=upstream_model,
+                )
             logger.info(
                 "PDP decision REWRITE triggered for trace %s: %s",
                 ctx.trace_id,
