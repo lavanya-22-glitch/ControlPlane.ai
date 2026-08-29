@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ControlPlane.ai Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">
+          <span></span>
+        </div>
+        <div>
+          <p class="eyebrow">ControlPlane.ai</p>
+          <h1>Proxy Studio</h1>
+        </div>
+      </div>
+
+      <button id="new-thread-btn" class="primary-action">New inspection</button>
+
+      <section class="sidebar-section">
+        <div class="section-heading">
+          <span>Modes</span>
+        </div>
+        <div class="app-mode-list">
+          <button class="app-mode active" data-app-id="customer-support" data-mode-label="Chatbot Guard">
+            <strong>Customer Support</strong>
+            <span>PII masking, injection, bias, hallucination judge</span>
+          </button>
+          <button class="app-mode" data-app-id="internal-kb-rag" data-mode-label="RAG Guard">
+            <strong>Internal KB RAG</strong>
+            <span>Grounding, citations, context capping, cache</span>
+          </button>
+          <button class="app-mode" data-app-id="action-agent" data-mode-label="Agent Guard">
+            <strong>Action Agent</strong>
+            <span>Tool schema, bounds, confidence, reasoning checks</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="sidebar-section">
+        <div class="section-heading">
+          <span>Presets</span>
+        </div>
+        <div class="preset-list">
+          <button class="preset-card" data-preset="pii">PII update request</button>
+          <button class="preset-card" data-preset="injection">Prompt injection attempt</button>
+          <button class="preset-card" data-preset="rag_clean">Grounded RAG response</button>
+          <button class="preset-card" data-preset="rag_hallu">Hallucination rewrite</button>
+          <button class="preset-card" data-preset="agent_valid">Valid agent tool call</button>
+          <button class="preset-card" data-preset="agent_invalid">Blocked tool violation</button>
+        </div>
+      </section>
+
+      <section class="sidebar-section">
+        <div class="section-heading">
+          <span>Recent traces</span>
+          <button id="refresh-traces-btn" class="ghost-button" type="button">Refresh</button>
+        </div>
+        <div id="trace-list" class="trace-list">
+          <div class="empty-inline">No traces yet.</div>
+        </div>
+      </section>
+    </aside>
+
+    <main class="workspace">
+      <header class="workspace-header">
+        <div>
+          <p class="eyebrow">Safety Gateway Workspace</p>
+          <h2>Chat-style proxy inspection console</h2>
+        </div>
+        <div class="header-status">
+          <div class="status-chip">
+            <span class="status-dot"></span>
+            <span id="health-label">Checking service</span>
+          </div>
+          <a class="header-link" href="/dashboard">Legacy dashboard</a>
+        </div>
+      </header>
+
+      <section class="hero">
+        <div>
+          <p class="hero-kicker">Inline governance with operator context</p>
+          <h3>Send a prompt, inspect the proxy decision, and review the resulting trace without leaving the conversation.</h3>
+        </div>
+        <div class="hero-metrics">
+          <article class="hero-metric">
+            <span>Total requests</span>
+            <strong id="metric-total">0</strong>
+          </article>
+          <article class="hero-metric">
+            <span>Avg latency</span>
+            <strong id="metric-latency">0.0ms</strong>
+          </article>
+          <article class="hero-metric">
+            <span>Blocked</span>
+            <strong id="metric-block">0</strong>
+          </article>
+          <article class="hero-metric">
+            <span>Rewritten</span>
+            <strong id="metric-rewrite">0</strong>
+          </article>
+        </div>
+      </section>
+
+      <div class="workspace-grid">
+        <section class="conversation-panel">
+          <div id="conversation" class="conversation">
+            <article class="message system-message">
+              <div class="message-meta">
+                <span class="message-role">System</span>
+                <span class="message-time">Ready</span>
+              </div>
+              <div class="message-body">
+                This studio uses the existing ControlPlane endpoints. Pick a mode, send a request, and inspect the PDP decision on the right.
+              </div>
+            </article>
+          </div>
+
+          <form id="composer-form" class="composer">
+            <div class="composer-toolbar">
+              <div class="composer-pills">
+                <span id="active-app-pill" class="mode-pill">customer-support</span>
+                <label class="toggle">
+                  <input id="stream-toggle" type="checkbox">
+                  <span>Streaming</span>
+                </label>
+              </div>
+              <button id="run-preset-btn" class="secondary-action" type="button">Load preset</button>
+            </div>
+
+            <label class="composer-label" for="prompt-input">Prompt</label>
+            <textarea id="prompt-input" rows="4" placeholder="Send a request through the proxy..."></textarea>
+
+            <label class="composer-label" for="context-input">Retrieved context</label>
+            <textarea id="context-input" rows="3" class="mono" placeholder='Optional JSON array for RAG, for example ["Policy: refunds are issued within 5 business days."]'></textarea>
+
+            <div class="composer-actions">
+              <div class="composer-hint">Requests go to `/v1/chat/completions` with `X-ControlPlane-App-ID`.</div>
+              <button id="send-btn" class="primary-action" type="submit">Send through proxy</button>
+            </div>
+          </form>
+        </section>
+
+        <aside class="inspector-panel">
+          <section class="inspector-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">Current run</p>
+                <h3>Decision inspector</h3>
+              </div>
+              <span id="decision-badge" class="decision-badge neutral">Idle</span>
+            </div>
+
+            <div class="stats-grid">
+              <div class="stat-tile">
+                <span>Status</span>
+                <strong id="run-status">-</strong>
+              </div>
+              <div class="stat-tile">
+                <span>Latency</span>
+                <strong id="run-latency">-</strong>
+              </div>
+              <div class="stat-tile">
+                <span>Trace</span>
+                <strong id="run-trace" class="mono small-text">-</strong>
+              </div>
+              <div class="stat-tile">
+                <span>Violation</span>
+                <strong id="run-reason" class="small-text">-</strong>
+              </div>
+            </div>
+
+            <div class="detail-block">
+              <div class="detail-header">
+                <h4>Response payload</h4>
+                <button id="copy-response-btn" class="ghost-button" type="button">Copy</button>
+              </div>
+              <pre id="response-preview" class="code-block">Run a request to inspect the response.</pre>
+            </div>
+          </section>
+
+          <section class="inspector-card">
+            <div class="card-heading">
+              <div>
+                <p class="eyebrow">Observability</p>
+                <h3>Policy and metrics</h3>
+              </div>
+              <button id="refresh-metrics-btn" class="ghost-button" type="button">Refresh</button>
+            </div>
+
+            <div class="mini-metrics">
+              <div class="mini-metric">
+                <span>Allow</span>
+                <strong id="metric-allow">0</strong>
+              </div>
+              <div class="mini-metric">
+                <span>Transform</span>
+                <strong id="metric-transform">0</strong>
+              </div>
+              <div class="mini-metric">
+                <span>Rewrite</span>
+                <strong id="metric-rewrite-side">0</strong>
+              </div>
+              <div class="mini-metric">
+                <span>Policy mode</span>
+                <strong id="active-mode-label">Chatbot Guard</strong>
+              </div>
+            </div>
+
+            <div class="detail-block">
+              <div class="detail-header">
+                <h4>Active policy</h4>
+                <button id="reload-policies-btn" class="ghost-button" type="button">Reload</button>
+              </div>
+              <pre id="policy-preview" class="code-block">Loading policy...</pre>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
