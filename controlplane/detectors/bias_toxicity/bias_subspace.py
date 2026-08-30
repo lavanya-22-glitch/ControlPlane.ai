@@ -67,8 +67,9 @@ class BiasSubspaceGuard(BaseDetector):
         if getattr(config, "counterfactual_check_enabled", False):
             ollama_url = getattr(config, "counterfactual_ollama_base_url", "http://localhost:11434/api/generate")
             model_name = getattr(config, "counterfactual_ollama_model_name", "batiai/gemma4-e2b:q4")
+            api_key = ctx.metadata.get("openrouter_api_key")
             
-            is_biased, cf_reason = await self._counterfactual_scorer.score(text, ollama_url, model_name)
+            is_biased, cf_reason = await self._counterfactual_scorer.score(text, ollama_url, model_name, api_key)
             if is_biased:
                 # Assign maximum severity score if SLM judges it biased
                 return self._violation(ctx, 1.0, threshold, cf_reason, {"counterfactual": True})

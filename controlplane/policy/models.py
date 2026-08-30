@@ -102,10 +102,10 @@ class ReasoningSimilarityConfig(BaseModel):
 
 
 class ChatbotHallucinationConfig(BaseModel):
-    """Configuration for SLM LLM-as-a-judge hallucination detection in chatbots."""
+    """Configuration for LLM-as-a-judge hallucination detection via OpenRouter."""
     enabled: bool = False
-    ollama_base_url: str = "http://localhost:11434/api/generate"
-    ollama_model_name: str = "batiai/gemma4-e2b:q4"
+    ollama_base_url: str = "https://openrouter.ai/api/v1/chat/completions"  # kept for compat, not used directly
+    ollama_model_name: str = "google/gemma-3-27b-it:free"
     # Action if the judge determines it's a hallucination
     action_on_violation: str = "rewrite"
     fallback_message: str = "I'm sorry, I cannot verify the accuracy of this response."
@@ -128,8 +128,8 @@ class PostExecutionConfig(BaseModel):
     # Advanced Bias Settings
     bias_projection_enabled: bool = False
     counterfactual_check_enabled: bool = False
-    counterfactual_ollama_base_url: str = "http://localhost:11434/api/generate"
-    counterfactual_ollama_model_name: str = "batiai/gemma4-e2b:q4"
+    counterfactual_ollama_base_url: str = "https://openrouter.ai/api/v1/chat/completions"  # kept for compat
+    counterfactual_ollama_model_name: str = "google/gemma-3-27b-it:free"
 
     hallucination_engine: Optional[HallucinationConfig] = None
     chatbot_hallucination: Optional[ChatbotHallucinationConfig] = None

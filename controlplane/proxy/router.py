@@ -58,6 +58,7 @@ async def chat_completions(
     req_body: ChatCompletionRequest,
     request: Request,
     x_controlplane_app_id: Optional[str] = Header(default=None, alias="X-ControlPlane-App-ID"),
+    x_controlplane_openrouter_key: Optional[str] = Header(default=None, alias="X-ControlPlane-OpenRouter-Key"),
 ):
     """Drop-in OpenAI-compatible chat completions proxy endpoint."""
     t_start = time.perf_counter()
@@ -76,6 +77,8 @@ async def chat_completions(
         retrieved_context=req_body.retrieved_context,
         tool_calls=None,
     )
+    if x_controlplane_openrouter_key:
+        ctx.metadata["openrouter_api_key"] = x_controlplane_openrouter_key
 
     # -------------------------------------------------------------
     # 0. SEMANTIC CACHING
@@ -147,11 +150,39 @@ async def chat_completions(
                 final_response_payload=json.dumps(error_body),
             )
         )
-        return JSONResponse(status_code=422, content=error_body)
+        return JSONResponse(
+            status_code=422, 
+            content=error_body,
+            headers={"X-ControlPlane-Policy-Action": "BLOCK", "X-ControlPlane-Trace-ID": trace_id}
+        )
 
     # Update request messages with masked versions
     upstream_payload = raw_payload_dict.copy()
     upstream_payload["messages"] = ctx.messages
+
+    # For RAG mode: inject retrieved_context directly into the user message
+    # using the standard RAG prompt-stuffing pattern.
+    # This is more reliable than a second system message which many LLMs ignore.
+    if ctx.retrieved_context:
+        context_block = "\n".join(f"- {doc}" for doc in ctx.retrieved_context)
+        # Augment the LAST user message with the context
+        messages = upstream_payload["messages"]
+        augmented = []
+        last_user_idx = max((i for i, m in enumerate(messages) if m.get("role") == "user"), default=None)
+        for i, msg in enumerate(messages):
+            if i == last_user_idx:
+                augmented.append({
+                    "role": "user",
+                    "content": (
+                        f"Use ONLY the following context to answer the question. "
+                        f"If the answer is not in the context, say you don't have that information.\n\n"
+                        f"CONTEXT:\n{context_block}\n\n"
+                        f"QUESTION: {msg['content']}"
+                    )
+                })
+            else:
+                augmented.append(msg)
+        upstream_payload["messages"] = augmented
 
     # -------------------------------------------------------------
     # 2. UPSTREAM DISPATCH (Live API or Mock Provider)
@@ -170,7 +201,19 @@ async def chat_completions(
 
     # Synchronous Request
     raw_headers = dict(request.headers)
-    upstream_response = await dispatcher.dispatch(upstream_payload, raw_headers)
+    try:
+        upstream_response = await dispatcher.dispatch(upstream_payload, raw_headers)
+    except Exception as exc:
+        import httpx as _httpx
+        if isinstance(exc, _httpx.HTTPStatusError):
+            status_code = exc.response.status_code
+            try:
+                body = exc.response.json()
+            except Exception:
+                body = {"error": {"message": exc.response.text, "status": str(status_code)}}
+            logger.warning("Upstream error %s forwarded to client: %s", status_code, str(exc)[:150])
+            return JSONResponse(status_code=status_code, content=body)
+        raise  # re-raise unexpected errors
     t_upstream_end = time.perf_counter()
     upstream_latency_ms = (t_upstream_end - t_upstream_start) * 1000
 
@@ -267,7 +310,9 @@ async def chat_completions(
     if "rag_hallucination_engine" in final_decision.scores:
         response_headers["X-ControlPlane-Score-Grounding"] = f"{final_decision.scores['rag_hallucination_engine']:.3f}"
     if final_decision.reason:
-        response_headers["X-ControlPlane-Violation-Reason"] = str(final_decision.reason)
+        # HTTP headers must be Latin-1/ASCII. Remove any unicode characters (like em-dash)
+        safe_reason = str(final_decision.reason).encode('ascii', 'ignore').decode('ascii')
+        response_headers["X-ControlPlane-Violation-Reason"] = safe_reason
 
     # -------------------------------------------------------------
     # 5. ASYNC AUDIT TELEMETRY SINK

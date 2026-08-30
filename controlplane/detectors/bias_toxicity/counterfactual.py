@@ -2,15 +2,22 @@
 Counterfactual Checker.
 
 Performs "Identity Swapping" (e.g., swapping "he" to "she") and evaluates
-if the output is heavily biased against the swapped demographic using an SLM judge.
+if the output is heavily biased against the swapped demographic using a cloud LLM judge
+via OpenRouter (Google Gemma 4, OpenAI-compatible API).
 """
 import re
 import json
 import logging
+import os
 import httpx
 from typing import Optional, Tuple
 
 logger = logging.getLogger("controlplane.detectors.bias.counterfactual")
+
+# OpenRouter endpoint (OpenAI-compatible)
+_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+_OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+_DEFAULT_MODEL = "google/gemma-3-27b-it:free"
 
 # Basic identity swaps for counterfactual generation
 IDENTITY_SWAPS = [
@@ -42,13 +49,16 @@ JSON Output:
 """
 
 class CounterfactualScorer:
-    """Generates counterfactuals and evaluates them using Ollama."""
+    """Generates counterfactuals and evaluates them using Google Gemma via OpenRouter."""
     
     _client: Optional[httpx.AsyncClient] = None
 
+    def __init__(self, api_key: str = _OPENROUTER_API_KEY):
+        self.api_key = api_key
+
     def _get_client(self) -> httpx.AsyncClient:
         if CounterfactualScorer._client is None:
-            CounterfactualScorer._client = httpx.AsyncClient(timeout=10.0)
+            CounterfactualScorer._client = httpx.AsyncClient(timeout=20.0)
         return CounterfactualScorer._client
 
     def _generate_counterfactual(self, text: str) -> Optional[str]:
@@ -64,39 +74,49 @@ class CounterfactualScorer:
             return swapped
         return None
 
-    async def score(self, text: str, ollama_url: str, model_name: str) -> Tuple[bool, str]:
-        """Returns (is_biased, reason)."""
+
+    async def score(self, text: str, ollama_url: str, model_name: str, api_key: Optional[str] = None) -> Tuple[bool, str]:
+        """Returns (is_biased, reason). ollama_url and model_name params kept for interface compat."""
         swapped_text = self._generate_counterfactual(text)
         if not swapped_text:
-            return False, "" # No identity terms found to swap
+            return False, ""  # No identity terms found to swap
 
         prompt = _COUNTERFACTUAL_PROMPT.format(
             original=text,
             swapped=swapped_text
         )
-        
+
         payload = {
-            "model": model_name,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json"
+            "model": model_name or _DEFAULT_MODEL,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.1,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key or self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://controlplane.ai",
+            "X-Title": "ControlPlane.ai Bias Guard",
         }
 
         try:
             client = self._get_client()
-            resp = await client.post(ollama_url, json=payload)
+            resp = await client.post(_OPENROUTER_URL, json=payload, headers=headers)
             resp.raise_for_status()
             result_data = resp.json()
-            judge_output = result_data.get("response", "")
-            
-            parsed = json.loads(judge_output)
+            judge_output = result_data["choices"][0]["message"]["content"]
+
+            # Strip markdown fences if present
+            raw = judge_output.strip().strip("```json").strip("```").strip()
+            parsed = json.loads(raw)
             is_biased = parsed.get("is_biased", False)
             reason = parsed.get("reason", "No reason provided")
-            
+
             if is_biased:
                 return True, f"Counterfactual bias detected: {reason}"
             return False, ""
-            
+
         except Exception as e:
-            logger.error("Counterfactual SLM check failed: %s", e)
-            return False, "" # Fail open
+            logger.error("Counterfactual OpenRouter check failed: %s", e)
+            return False, ""  # Fail open

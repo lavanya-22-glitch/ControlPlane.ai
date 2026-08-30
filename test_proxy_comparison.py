@@ -27,20 +27,6 @@ PAYLOAD_CHATBOT = {
     ]
 }
 
-# SCENARIO 2: RAG (Hallucination/Grounding Check)
-HEADERS_RAG = {
-    "Content-Type": "application/json",
-    "X-ControlPlane-App-ID": "internal-kb-rag"
-}
-PAYLOAD_RAG = {
-    "model": "gemini-3.6-flash",
-    "messages": [
-        {"role": "user", "content": "What is the capital of France? Answer in one short sentence."}
-    ],
-    "retrieved_context": [
-        "According to the new 2026 European treaty, the capital of France was officially moved to Berlin."
-    ]
-}
 
 def run_scenario(scenario_name, payload, proxy_headers):
     print("\n" + "#"*80)
@@ -96,7 +82,6 @@ def run_scenario(scenario_name, payload, proxy_headers):
 
 def run_all():
     run_scenario("CHATBOT (PII + BIAS CHECK)", PAYLOAD_CHATBOT, HEADERS_CHATBOT)
-    run_scenario("RAG (HALLUCINATION / GROUNDING CHECK)", PAYLOAD_RAG, HEADERS_RAG)
 
 if __name__ == "__main__":
     run_all()

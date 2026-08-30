@@ -463,3 +463,82 @@ body {
   font-size: 13px;
   font-weight: 600;
 }
+
+/* ── API Key Banner ─────────────────────────────────────────────────────── */
+.api-key-banner {
+  background: linear-gradient(135deg, rgba(59,130,246,0.07), rgba(139,92,246,0.07));
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 12px;
+  padding: 18px 24px;
+  margin-bottom: 20px;
+}
+
+.api-key-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.api-key-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.api-key-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+
+.api-key-text strong {
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.api-key-text span {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.api-key-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+  min-width: 280px;
+}
+
+.api-key-input {
+  flex: 1;
+  font-family: var(--font-mono) !important;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+.api-key-status {
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 100%;
+  margin-top: 4px;
+  font-family: var(--font-mono);
+}
+
+.btn-sm {
+  padding: 8px 14px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+}

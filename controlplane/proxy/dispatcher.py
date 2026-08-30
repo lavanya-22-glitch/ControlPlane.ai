@@ -43,7 +43,23 @@ class UpstreamDispatcher:
         clean_payload = {k: v for k, v in payload.items() if k != "retrieved_context"}
 
         response = await client.post(self.upstream_url, json=clean_payload, headers=headers)
-        response.raise_for_status()
+        
+        if not response.is_success:
+            # Forward the upstream error body and status code as-is so the
+            # client sees the real error (e.g., 429 quota, 404 model not found)
+            # instead of a generic 500 from our proxy crashing.
+            from fastapi.responses import JSONResponse
+            logger.warning(
+                "Upstream returned %s: %s",
+                response.status_code,
+                response.text[:200],
+            )
+            raise httpx.HTTPStatusError(
+                message=response.text,
+                request=response.request,
+                response=response,
+            )
+        
         return response.json()
 
     async def close(self) -> None:

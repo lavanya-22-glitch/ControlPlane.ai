@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     tbody.innerHTML = traces.map(t => {
-      const piiList = (t.pii_entities_found && t.pii_entities_found.length > 0) 
+      const piiList = (t.pii_entities_found && t.pii_entities_found.length > 0)
         ? t.pii_entities_found.map(e => `<span class="badge" style="background:#2d2212;color:#f59e0b;">${e}</span>`).join(" ")
         : '<span class="text-muted">None</span>';
 
@@ -88,7 +88,63 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Preset Select Handler
+  // ── API Key management (sessionStorage — cleared on tab close) ─────────
+  const apiKeyInput  = document.getElementById("sb-api-key");
+  const orKeyInput   = document.getElementById("sb-openrouter-key");
+  const apiKeyStatus = document.getElementById("api-key-status");
+
+  function _maskKey(k) {
+    if (!k) return "";
+    return k.slice(0, 8) + "…" + k.slice(-4);
+  }
+
+  function _loadSavedKeys() {
+    const savedGemini = sessionStorage.getItem("cp_judge_api_key");
+    const savedOR = sessionStorage.getItem("cp_or_api_key");
+    
+    if (savedGemini || savedOR) {
+      let txt = "✅ Active keys: ";
+      if (savedGemini) {
+        apiKeyInput.value = savedGemini;
+        txt += `Gemini: ${_maskKey(savedGemini)} `;
+      }
+      if (savedOR) {
+        orKeyInput.value = savedOR;
+        txt += `OpenRouter: ${_maskKey(savedOR)}`;
+      }
+      apiKeyStatus.textContent = txt;
+      apiKeyStatus.style.color = "#4ade80";
+    }
+  }
+  _loadSavedKeys();
+
+  document.getElementById("btn-save-key")?.addEventListener("click", () => {
+    const geminiKey = apiKeyInput.value.trim();
+    const orKey = orKeyInput.value.trim();
+    
+    if (geminiKey) sessionStorage.setItem("cp_judge_api_key", geminiKey);
+    else sessionStorage.removeItem("cp_judge_api_key");
+    
+    if (orKey) sessionStorage.setItem("cp_or_api_key", orKey);
+    else sessionStorage.removeItem("cp_or_api_key");
+    
+    _loadSavedKeys();
+    
+    if (!geminiKey && !orKey) {
+      apiKeyStatus.textContent = "⚠️ Please enter at least one key.";
+      apiKeyStatus.style.color = "#f59e0b";
+    }
+  });
+
+  document.getElementById("btn-clear-key")?.addEventListener("click", () => {
+    sessionStorage.removeItem("cp_judge_api_key");
+    sessionStorage.removeItem("cp_or_api_key");
+    apiKeyInput.value = "";
+    orKeyInput.value = "";
+    apiKeyStatus.textContent = "No custom keys set — using server .env defaults";
+    apiKeyStatus.style.color = "";
+  });
+
   const presets = {
     pii: {
       appId: "customer-support",
@@ -122,8 +178,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  // Preset Select Handler
   const presetSelect = document.getElementById("preset-select");
-  presetSelect.addEventListener("change", () => {
+  presetSelect?.addEventListener("change", () => {
     const key = presetSelect.value;
     if (presets[key]) {
       document.getElementById("sb-app-id").value = presets[key].appId;
@@ -134,27 +191,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Run Sandbox Request
   const btnRun = document.getElementById("btn-run-sandbox");
-  btnRun.addEventListener("click", async () => {
-    const appId = document.getElementById("sb-app-id").value.trim() || "customer-support";
-    const promptText = document.getElementById("sb-prompt").value.trim();
-    const contextRaw = document.getElementById("sb-context").value.trim();
+  btnRun?.addEventListener("click", async () => {
+    const appId       = document.getElementById("sb-app-id").value.trim() || "customer-support";
+    const promptText  = document.getElementById("sb-prompt").value.trim();
+    const contextRaw  = document.getElementById("sb-context").value.trim();
+    const modelName   = document.getElementById("sb-model")?.value || "gemini-3.6-flash";
+    const judgeApiKey = sessionStorage.getItem("cp_judge_api_key") || "";
+    const openRouterKey = sessionStorage.getItem("cp_or_api_key") || "";
 
     let contextList = null;
     if (contextRaw) {
-      try {
-        contextList = JSON.parse(contextRaw);
-      } catch (e) {
-        contextList = [contextRaw];
-      }
+      try { contextList = JSON.parse(contextRaw); }
+      catch (e) { contextList = [contextRaw]; }
     }
 
     const payload = {
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "user", content: promptText }
-      ],
+      model: modelName,
+      messages: [{ role: "user", content: promptText }],
       retrieved_context: contextList
     };
+
+    const reqHeaders = {
+      "Content-Type": "application/json",
+      "X-ControlPlane-App-ID": appId,
+    };
+    if (judgeApiKey) reqHeaders["Authorization"] = `Bearer ${judgeApiKey}`;
+    if (openRouterKey) reqHeaders["X-ControlPlane-OpenRouter-Key"] = openRouterKey;
 
     btnRun.disabled = true;
     btnRun.textContent = "Inspecting...";
@@ -163,10 +225,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const response = await fetch("/v1/chat/completions", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-ControlPlane-App-ID": appId
-        },
+        headers: reqHeaders,
         body: JSON.stringify(payload)
       });
 
@@ -174,18 +233,36 @@ document.addEventListener("DOMContentLoaded", () => {
       const data = await response.json();
       const pdpAction = response.headers.get("X-ControlPlane-Policy-Action") || (response.status === 422 ? "BLOCK" : "ALLOW");
 
-      // Update badge and metrics
       const badge = document.getElementById("sb-pdp-badge");
       badge.textContent = `PDP Action: ${pdpAction}`;
       badge.className = `badge pdp-badge ${pdpAction}`;
 
       document.getElementById("sb-status").textContent = `HTTP ${response.status}`;
       document.getElementById("sb-total-lat").textContent = `${totalTime}ms`;
-      document.getElementById("sb-pre-lat").textContent = `< 10ms`;
 
-      document.getElementById("sb-response-json").textContent = JSON.stringify(data, null, 2);
+      const proxyLatency = response.headers.get("X-ControlPlane-Latency-MS");
+      document.getElementById("sb-pre-lat").textContent = proxyLatency
+        ? `${parseFloat(proxyLatency).toFixed(1)}ms (proxy total)`
+        : `< 10ms`;
+
+      // Annotate response with ControlPlane headers for transparency
+      const annotated = {
+        _controlplane_trace: {
+          pdp_action: pdpAction,
+          trace_id: response.headers.get("X-ControlPlane-Trace-ID") || null,
+          violation_reason: response.headers.get("X-ControlPlane-Violation-Reason") || null,
+          injection_score: response.headers.get("X-ControlPlane-Score-Injection") || null,
+          bias_score: response.headers.get("X-ControlPlane-Score-Bias") || null,
+          total_latency_ms: parseFloat(totalTime),
+          model_used: modelName,
+          key_source: judgeApiKey ? "judge (session)" : "server (.env)",
+        },
+        ...data
+      };
+
+      document.getElementById("sb-response-json").textContent = JSON.stringify(annotated, null, 2);
     } catch (e) {
-      document.getElementById("sb-response-json").textContent = `Error sending request: ${e.message}`;
+      document.getElementById("sb-response-json").textContent = `Error: ${e.message}`;
     } finally {
       btnRun.disabled = false;
       btnRun.textContent = "Send Through Proxy Gate";
@@ -209,4 +286,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initial fetch and 3-second live poll
   fetchTelemetry();
   setInterval(fetchTelemetry, 3000);
+  
+  console.log("ControlPlane app.js fully loaded and initialized!");
 });

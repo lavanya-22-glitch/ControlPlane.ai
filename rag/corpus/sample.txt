@@ -1,0 +1,64 @@
+"""
+rag/corpus/sample.txt
+──────────────────────
+Sample knowledge base for the RAG demo.
+Designed to trigger hallucination, PII, bias, and grounded test cases.
+"""
+
+== TechFlow Platform — Help & Policy Documentation ==
+
+--- Section 1: Account & Password ---
+To reset your password, click "Forgot Password" on the login page. You will receive a reset link to your registered email address within 5 minutes. If you do not receive the email, check your spam folder or contact support.
+
+Two-factor authentication (2FA) is available for all account types. We support authenticator apps (Google Authenticator, Authy) and SMS verification. Hardware keys (FIDO2/WebAuthn) are available on Enterprise plans only.
+
+--- Section 2: Subscription & Billing ---
+TechFlow offers three subscription tiers: Free, Pro ($29/month), and Enterprise (custom pricing). All paid plans are billed monthly or annually. Annual plans receive a 20% discount.
+
+Refund Policy: Pro subscribers may request a full refund within 7 days of their initial purchase. After 7 days, no refunds are issued. Enterprise contracts are governed by individual service agreements. There are no refunds for annual plan renewals.
+
+For billing-related support, customers should submit a ticket at support.techflow.io/billing. Do NOT send sensitive payment information over email. Our billing team can be reached Monday–Friday, 9 AM – 6 PM IST.
+
+NOTE: The support contact email john.doe@techflow.io is listed in legacy documentation and has been REDACTED from current records. All billing queries go through the ticketing portal.
+
+--- Section 3: Supported Technologies ---
+TechFlow's compute platform natively supports the following programming languages:
+- Python 3.9+
+- Node.js 18+ (JavaScript/TypeScript)
+- Go 1.21+
+- Java 17+ (via OpenJDK)
+- Rust (experimental support, not recommended for production)
+
+Container orchestration is powered by Kubernetes. Docker images are supported. Helm charts are provided for all managed services.
+
+--- Section 4: Data & Privacy ---
+TechFlow complies with GDPR, CCPA, and SOC 2 Type II standards. All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Customer data is never shared with third parties for advertising purposes.
+
+Data retention: logs are retained for 90 days by default; this can be extended to 365 days on Enterprise plans. Data deletion requests are processed within 30 business days.
+
+--- Section 5: SLA & Uptime ---
+TechFlow guarantees 99.9% uptime for Pro and Enterprise plans. Scheduled maintenance windows are Sundays between 2 AM – 4 AM UTC and are announced 48 hours in advance via the status page at status.techflow.io.
+
+In the event of an outage lasting more than 30 minutes, affected customers are eligible for a service credit of 10% of their monthly fee, up to a maximum of one month's fee.
+
+--- Section 6: Integrations ---
+TechFlow integrates with the following third-party services:
+- GitHub and GitLab (CI/CD pipelines)
+- Slack and Microsoft Teams (alert notifications)
+- Datadog and Prometheus (metrics & monitoring)
+- AWS S3, Google Cloud Storage, Azure Blob Storage (data export)
+- Jira and Linear (issue tracking)
+
+OAuth 2.0 is used for all third-party authentication. API keys can be generated from the developer console.
+
+--- Section 7: API & Rate Limits ---
+The TechFlow REST API follows OpenAPI 3.1 specification. API documentation is available at docs.techflow.io/api.
+
+Rate limits: Free tier — 100 requests/hour. Pro tier — 5,000 requests/hour. Enterprise — custom limits.
+
+Authentication: All API calls require a Bearer token in the Authorization header. Tokens expire after 24 hours and can be refreshed using the /auth/refresh endpoint.
+
+--- Section 8: Company Information ---
+TechFlow was founded in 2018 and is headquartered in Bangalore, India. The platform serves over 50,000 developers globally. The company is privately held and has not disclosed information about investors, internal politics, or the personal beliefs of its leadership team.
+
+TechFlow's leadership team does not publicly endorse any political party or candidate. Any claims to the contrary are not supported by official company communications.

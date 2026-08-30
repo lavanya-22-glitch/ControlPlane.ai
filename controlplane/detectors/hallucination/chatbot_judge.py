@@ -2,7 +2,7 @@
 SLM as a Judge for Chatbot Hallucination.
 
 Detects hallucinations or fabrications in standalone chatbot responses
-by consulting an external Small Language Model (SLM) via the Ollama API.
+by consulting an external cloud LLM via the OpenRouter API (OpenAI-compatible).
 Since chatbots typically do not use retrieved context chunks, this guard
 evaluates the model's completion against the conversation history for
 internal consistency, fabrications, or logical contradictions.
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import httpx
 from typing import Dict, Any, Optional
 
@@ -18,6 +19,11 @@ from controlplane.detectors.base import BaseDetector, DetectionResult, GuardCont
 from controlplane.pdp.types import PDPAction, ViolationCode
 
 logger = logging.getLogger("controlplane.detectors.hallucination.chatbot_judge")
+
+# OpenRouter endpoint (OpenAI-compatible chat completions)
+_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+_OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+_DEFAULT_MODEL = "google/gemma-3-27b-it:free"
 
 # The prompt used to instruct the SLM judge. We ask for a strict JSON output.
 _JUDGE_PROMPT_TEMPLATE = """
@@ -41,7 +47,7 @@ JSON Output:
 
 class ChatbotHallucinationGuard(BaseDetector):
     """
-    Evaluates chatbot responses using a local Ollama model (SLM as a judge).
+    Evaluates chatbot responses using Google Gemma 4 via OpenRouter (cloud, no local GPU needed).
     """
     
     # Use a single shared httpx client for connection pooling
@@ -84,37 +90,45 @@ class ChatbotHallucinationGuard(BaseDetector):
             response=ctx.completion_text
         )
 
-        ollama_url = getattr(config, "ollama_base_url", "http://localhost:11434/api/generate")
-        model_name = getattr(config, "ollama_model_name", "batiai/gemma4-e2b:q4")
-        
+        ollama_url = getattr(config, "ollama_base_url", _OPENROUTER_URL)
+        model_name = getattr(config, "ollama_model_name", _DEFAULT_MODEL)
+        api_key = ctx.metadata.get("openrouter_api_key") or _OPENROUTER_API_KEY
+
         payload = {
             "model": model_name,
-            "prompt": prompt,
-            "stream": False,
-            "format": "json" # Ollama supports forcing JSON format
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.1,
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://controlplane.ai",
+            "X-Title": "ControlPlane.ai Hallucination Guard",
         }
 
         try:
             client = self._get_client()
-            resp = await client.post(ollama_url, json=payload)
+            resp = await client.post(_OPENROUTER_URL, json=payload, headers=headers)
             resp.raise_for_status()
             result_data = resp.json()
-            judge_output = result_data.get("response", "")
-            
-            # Parse the SLM judge's JSON output
+            judge_output = result_data["choices"][0]["message"]["content"]
+
+            # Parse the judge's JSON output (strip markdown fences if present)
+            raw = judge_output.strip().strip("```json").strip("```").strip()
             try:
-                parsed = json.loads(judge_output)
+                parsed = json.loads(raw)
                 is_hallucination = parsed.get("is_hallucination", False)
                 reason = parsed.get("reason", "No reason provided")
             except json.JSONDecodeError:
-                logger.warning("Trace %s: SLM Judge output invalid JSON: %s", ctx.trace_id, judge_output)
-                # Fail-open if the judge model failed to format properly
+                logger.warning("Trace %s: Judge output invalid JSON: %s", ctx.trace_id, judge_output)
                 return self._allow(metadata={"reason": "judge_output_parse_error", "raw_output": judge_output})
 
         except Exception as e:
-            logger.error("Trace %s: Ollama API call failed: %s", ctx.trace_id, e)
-            # Fail-open on API errors to avoid breaking the proxy if Ollama is down
-            return self._allow(metadata={"reason": "ollama_api_error", "error": str(e)})
+            logger.error("Trace %s: OpenRouter API call failed: %s", ctx.trace_id, e)
+            # Fail-open on API errors to avoid breaking the proxy
+            return self._allow(metadata={"reason": "openrouter_api_error", "error": str(e)})
 
         metadata = {
             "judge_model": model_name,

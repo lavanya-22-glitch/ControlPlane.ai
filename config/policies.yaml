@@ -14,14 +14,14 @@ policies:
       bias_subspace_threshold: 0.65
       bias_projection_enabled: true
       counterfactual_check_enabled: true
-      counterfactual_ollama_base_url: "http://localhost:11434/api/generate"
-      counterfactual_ollama_model_name: "batiai/gemma4-e2b:q4"
+      counterfactual_ollama_base_url: "https://openrouter.ai/api/v1/chat/completions"
+      counterfactual_ollama_model_name: "google/gemma-3-27b-it:free"
       action_on_violation: "rewrite"
       fallback_message: "I am unable to complete this response due to content safety policies. Please contact customer support directly."
       chatbot_hallucination:
         enabled: true
-        ollama_base_url: "http://localhost:11434/api/generate"
-        ollama_model_name: "batiai/gemma4-e2b:q4"
+        ollama_base_url: "https://openrouter.ai/api/v1/chat/completions"
+        ollama_model_name: "google/gemma-3-27b-it:free"
         action_on_violation: "rewrite"
         fallback_message: "I'm sorry, I cannot verify the accuracy of this response."
 

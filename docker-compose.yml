@@ -18,6 +18,8 @@ services:
     volumes:
       - ./config:/app/config:ro
       - ./data:/app/data
+      - ./dashboard:/app/dashboard:ro
+      - ./controlplane:/app/controlplane:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
