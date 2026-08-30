@@ -67,10 +67,14 @@ dashboard_dir = Path(__file__).parent.parent / "dashboard"
 if dashboard_dir.exists():
     app.mount("/dashboard", StaticFiles(directory=str(dashboard_dir), html=True), name="dashboard")
 
+studio_dir = Path(__file__).parent.parent / "dashboard_pro"
+if studio_dir.exists():
+    app.mount("/studio", StaticFiles(directory=str(studio_dir), html=True), name="studio")
+
 
 @app.get("/", include_in_schema=False)
 async def root():
-    return RedirectResponse(url="/dashboard")
+    return RedirectResponse(url="/studio" if studio_dir.exists() else "/dashboard")
 
 
 if __name__ == "__main__":
