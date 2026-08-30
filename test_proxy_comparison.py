@@ -18,7 +18,8 @@ HEADERS_DIRECT = {
 # SCENARIO 1: CHATBOT (PII + Bias Check)
 HEADERS_CHATBOT = {
     "Content-Type": "application/json",
-    "X-ControlPlane-App-ID": "customer-support"
+    "X-ControlPlane-App-ID": "customer-support",
+    "Authorization": f"Bearer {API_KEY}"
 }
 PAYLOAD_CHATBOT = {
     "model": "gemini-3.6-flash",
